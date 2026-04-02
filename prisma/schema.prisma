@@ -1,0 +1,152 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ENUMS
+enum Users {
+  ADMIN
+  RECRUITER
+  CANDIDATE
+}
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  REJECTED
+  ACCEPTED
+}
+
+enum NotificationType {
+  APPLICATION_RECEIVED
+  JOB_POSTED
+  SYSTEM_ALERT
+}
+
+// MODELS
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  password    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  jobs          Job[]
+  users         User[]
+  notifications Notification[]
+
+  @@index([email])
+ 
+}
+
+model User {
+  id          String   @id @default(uuid())
+  userName    String
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  role        Users    @default(CANDIDATE)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id])
+
+  refreshTokens RefreshToken[]
+
+  @@index([companyId])
+ 
+}
+
+model Job {
+  id          String     @id @default(uuid())
+  title       String
+  description String
+  location    String?
+  salaryMin   Int?
+  salaryMax   Int?
+  status      JobStatus  @default(DRAFT)
+
+  companyId   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?  // soft delete
+
+  // Relations
+  company      Company       @relation(fields: [companyId], references: [id])
+  applications Application[]
+
+  // Indexes (VERY IMPORTANT)
+  @@index([companyId])
+  @@index([status, createdAt])
+  @@index([deletedAt])
+  
+}
+
+model Application {
+  id              String             @id @default(uuid())
+  jobId           String
+  candidateName   String
+  candidateEmail  String
+  resumeUrl       String?
+  coverLetter     String?
+  status          ApplicationStatus  @default(PENDING)
+
+  createdAt       DateTime @default(now())
+
+  // Relations
+  job Job @relation(fields: [jobId], references: [id])
+
+  // Prevent duplicate applications
+  @@unique([jobId, candidateEmail])
+
+  @@index([jobId])
+  @@index([candidateEmail])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType
+  message     String
+  isRead      Boolean          @default(false)
+
+  companyId   String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, isRead])
+  
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
