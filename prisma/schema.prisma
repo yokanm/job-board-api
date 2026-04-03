@@ -12,141 +12,230 @@ datasource db {
   provider = "postgresql"
 }
 
-// ENUMS
-enum Users {
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum UserRole {
   ADMIN
   RECRUITER
   CANDIDATE
 }
+
 enum JobStatus {
   DRAFT
   OPEN
   CLOSED
+  EXPIRED
+}
+
+enum LocationType {
+  REMOTE
+  ONSITE
+  HYBRID
+}
+
+enum ExperienceLevel {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
 }
 
 enum ApplicationStatus {
   PENDING
   REVIEWED
+  SHORTLISTED
   REJECTED
   ACCEPTED
 }
 
 enum NotificationType {
   APPLICATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
   JOB_POSTED
+  JOB_EXPIRED
   SYSTEM_ALERT
 }
 
-// MODELS
+// ─── Company side ─────────────────────────────────────────
 
 model Company {
-  id          String   @id @default(uuid())
-  name        String
-  email       String   @unique
-  password    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  name       String
+  slug       String    @unique
+  email      String    @unique
+  password   String
+  logoUrl    String?
+  website    String?
+  industry   String?
+  size       String?
+  isVerified Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
 
-  // Relations
-  jobs          Job[]
   users         User[]
+  jobs          Job[]
   notifications Notification[]
 
+  @@map("companies")
   @@index([email])
- 
+  @@index([slug])
+  @@index([deletedAt])
 }
 
 model User {
-  id          String   @id @default(uuid())
-  userName    String
-  email       String   @unique
-  password    String
-  firstName   String
-  lastName    String
-  role        Users    @default(CANDIDATE)
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String    @id @default(uuid())
+  userName  String
+  firstName String
+  lastName  String
+  email     String    @unique
+  password  String
+  phone     String?
+  role      UserRole  @default(CANDIDATE)
+  companyId String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  // Relations
-  company Company @relation(fields: [companyId], references: [id])
-
+  profile       UserProfile?
+  company       Company?        @relation(fields: [companyId], references: [id])
+  postedJobs    Job[]          @relation("PostedBy")
   refreshTokens RefreshToken[]
+  applications  JobApplication[]
 
+  @@map("users")
   @@index([companyId])
- 
+  @@index([email])
+  @@index([deletedAt])
 }
 
-model Job {
-  id          String     @id @default(uuid())
-  title       String
-  description String
+
+model UserProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  bio         String?
+  resumeUrl   String?
+  linkedinUrl String?
+  githubUrl   String?
+  skills      String[]
   location    String?
-  salaryMin   Int?
-  salaryMax   Int?
-  status      JobStatus  @default(DRAFT)
+  updatedAt   DateTime @updatedAt
 
-  companyId   String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  deletedAt   DateTime?  // soft delete
+  user User @relation(fields: [userId], references: [id])
+  @@map("user_Profiles")
+}
 
-  // Relations
-  company      Company       @relation(fields: [companyId], references: [id])
-  applications Application[]
+// ─── Jobs ─────────────────────────────────────────────────
 
-  // Indexes (VERY IMPORTANT)
+model Job {
+  id              String          @id @default(uuid())
+  title           String
+  slug            String          @unique
+  description     String
+  location        String?
+  locationType    LocationType    @default(ONSITE)
+  salaryMin       Int?
+  salaryMax       Int?
+  currency        String          @default("USD")
+  status          JobStatus       @default(DRAFT)
+  experienceLevel ExperienceLevel @default(MID)
+  companyId       String
+  postedById      String
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  company      Company          @relation(fields: [companyId], references: [id])
+  postedBy     User             @relation("PostedBy", fields: [postedById], references: [id])
+  applications JobApplication[]
+  tags         JobTag[]
+
   @@index([companyId])
   @@index([status, createdAt])
   @@index([deletedAt])
-  
+  @@index([expiresAt])
+  @@map("jobs")
 }
 
-model Application {
-  id              String             @id @default(uuid())
+// ─── Applications ─────────────────────────────────────────
+
+model JobApplication {
+  id              String            @id @default(uuid())
   jobId           String
-  candidateName   String
-  candidateEmail  String
+  userId          String
   resumeUrl       String?
   coverLetter     String?
-  status          ApplicationStatus  @default(PENDING)
+  status          ApplicationStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  createdAt       DateTime @default(now())
+  job       Job       @relation(fields: [jobId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
-  // Relations
-  job Job @relation(fields: [jobId], references: [id])
-
-  // Prevent duplicate applications
-  @@unique([jobId, candidateEmail])
-
+  @@unique([jobId, userId])
   @@index([jobId])
-  @@index([candidateEmail])
+  @@index([userId])
+  @@index([status])
+  @@map("job_application")
 }
 
-model Notification {
-  id          String           @id @default(uuid())
-  type        NotificationType
-  message     String
-  isRead      Boolean          @default(false)
+// ─── Tags ─────────────────────────────────────────────────
 
-  companyId   String
-  createdAt   DateTime @default(now())
+model Tag {
+  id   String @id @default(uuid())
+  name String @unique
+  slug String @unique
 
-  // Relations
-  company Company @relation(fields: [companyId], references: [id])
+  jobs JobTag[]
 
-  @@index([companyId, isRead])
+  @@map("tags")
+}
+
+model JobTag {
+  jobId String
+  tagId String
+
+  job Job @relation(fields: [jobId], references: [id])
+  tag Tag @relation(fields: [tagId], references: [id])
+
+  @@id([jobId, tagId])
+  @@map("job_tags")
   
 }
 
+// ─── Auth ─────────────────────────────────────────────────
+
 model RefreshToken {
-  id          String   @id @default(uuid())
-  token       String   @unique
-  userId      String
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@map("refresh_token")
+}
+
+
+// ─── Notifications ────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  message   String
+  metadata  Json?
+  isRead    Boolean          @default(false)
+  companyId String
+  createdAt DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, isRead])
+  @@map("notifications")
 }

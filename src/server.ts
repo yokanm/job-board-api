@@ -7,17 +7,8 @@ import helmet from 'helmet';
 import limiter from '@/lib/express_rate_limit';
 import { connectDb, disconnectDb } from '@/lib/prisma';
 import logger from '@/lib/winston';
-/**
- * TYPE
- */
-
 import type { CorsOptions } from 'cors';
-/**
- * Route
- */
 import routeV1 from '@/routes/v1';
-import authRouter from '@/routes/v1'
-
 
 const app = express();
 
@@ -40,20 +31,14 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(
-  compression({
-    threshold: 1024,
-  }),
-);
+app.use(compression({threshold: 1024,}));
 app.use(helmet());
 app.use(limiter);
 
-
+app.use('/api/v1', routeV1);
 
 (async () => {
   try {
-      app.use('/api/v1', routeV1);
-      app.use('/', authRouter)
     await connectDb();
     app.listen(config.PORT, () => {
       logger.info(`Server is running on http://localhost:${config.PORT}`);
