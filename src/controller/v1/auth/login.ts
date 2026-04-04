@@ -13,7 +13,8 @@ const loginUser = async (req:Request, res:Response) => {
         const user = await prisma.user.findUnique({ where: { email } })
         
         if (!user) {
-            return res.status(401).json({message:"Email or password is invalid"})
+            res.status(401).json({ message: "Email or password is invalid" });
+             return 
         }
 
         if (user.deletedAt) {
@@ -64,17 +65,54 @@ const loginUser = async (req:Request, res:Response) => {
     }
 };
 
-const loginCompany = async (req: Request, res: Response) => {
+const loginCompany = async (req: Request, res: Response): Promise<void> => {
     try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            res.status(422).json({ message: "Email and password are required" });
+            return;
+        }
+
+        const company = await prisma.company.findUnique({ where: { email } });
+
+        if (!company || company.deletedAt) {
+            res.status(401).json({ message: "Email or password is invalid" });
+            return;
+        }
+
+        const passwordMatch = await bcrypt.compare(password, company.password);
+        if (!passwordMatch) {
+            res.status(401).json({ message: "Email or password is invalid" });
+            return;
+        }
+
+        const accessToken = generateAccessToken(company.id);
+        const refreshToken = generateRefreshToken(company.id);
+
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: config.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        res.status(200).json({
+            company: {
+                id: company.id,
+                name: company.name,
+                email: company.email,
+            },
+            accessToken,
+        });
         
-    } catch (error) {
-        res.status(500).json({
-            code: "ServerERROR",
-            message: "Internal Server error",
-            error: error
-        })
-        logger.error('Error during company login', error)
-    }
+        } catch (error) {
+            logger.error('Error during company login', error)
+            res.status(500).json({
+                message: "Internal Server error",
+                
+            })
+        }
 }
 
 export {loginUser, loginCompany}

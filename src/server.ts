@@ -1,28 +1,28 @@
 import express from 'express';
 import config from '@/config';
 import cors from 'cors';
+import type { CorsOptions } from 'cors';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import helmet from 'helmet';
 import limiter from '@/lib/express_rate_limit';
 import { connectDb, disconnectDb } from '@/lib/prisma';
 import logger from '@/lib/winston';
-import type { CorsOptions } from 'cors';
 import routeV1 from '@/routes/v1';
 
 const app = express();
 
 const corsOptions: CorsOptions = {
-  origin(Origin, callback) {
+  origin(origin, callback) {
     if (
       config.NODE_ENV === 'development' ||
       !origin ||
       config.ALLOW_ORIGINS.includes(origin)
-    )
+    ) {
       callback(null, true);
-    else {
-      callback(new Error(`CORS: Origin ${origin} not allowed`), false);
+    } else {
       logger.warn(`CORS: Origin ${origin} not allowed`);
+      callback(new Error(`CORS: Origin ${origin} not allowed`));
     }
   },
 };
@@ -40,6 +40,7 @@ app.use('/api/v1', routeV1);
 (async () => {
   try {
     await connectDb();
+    
     app.listen(config.PORT, () => {
       logger.info(`Server is running on http://localhost:${config.PORT}`);
     });
